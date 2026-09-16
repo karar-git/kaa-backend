@@ -249,7 +249,10 @@ def _check_stars(an: fieldlab.SessionAnalysis, ini: dict, job: dict) -> None:
     if not comps:
         frame = ini["exotransit_lab"]["pixel_reference_frame"]
         dx, dy = an.shifts[frame]
-        ranked = sorted(((k, s) for k, s in enumerate(an.stars) if k != an.target_idx and not s.saturated),
+        # Not our `saturated` flag: on bright-sky nights it marks every star
+        # (its threshold is an ADU level, not the detector's limit), which is
+        # exactly why the analysis has no comps. Only rule out true clipping.
+        ranked = sorted(((k, s) for k, s in enumerate(an.stars) if k != an.target_idx and s.peak < 60000),
                         key=lambda ks: -ks[1].flux)
         for k, s in ranked:
             x, y = an.positions[frame, k]
