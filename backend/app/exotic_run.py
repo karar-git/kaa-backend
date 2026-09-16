@@ -44,7 +44,8 @@ from . import exotic, fieldlab
 from .config import settings
 
 RUNS_DIR: Path = settings.EXOTIC_DIR
-STATUSES = ("queued", "running", "done", "failed")
+STATUSES = ("queued", "preparing", "running", "done", "failed")
+LIVE = ("queued", "preparing", "running")
 _LOG_TAIL = 20
 _PROGRESS = re.compile(r"Finding transformation (\d+) of (\d+)")
 _SPINNER = re.compile(r"(Thinking [|/\\-] \.\.\. ?)+")
@@ -143,7 +144,7 @@ def latest_for(session: str) -> dict | None:
     """Most recent job for a session, preferring finished ones."""
     jobs = [j for j in list_jobs() if j.get("session") == session]
     done = [j for j in jobs if j["status"] == "done"]
-    live = [j for j in jobs if j["status"] in ("queued", "running")]
+    live = [j for j in jobs if j["status"] in LIVE]
     return (done or live or jobs or [None])[0]
 
 
@@ -290,8 +291,15 @@ def _prepare(an: fieldlab.SessionAnalysis, job: dict) -> None:
 
 # --------------------------------------------------------------------- run
 
+_DRIVER = Path(__file__).with_name("exotic_driver.py")
+
+
 def _command(job: dict) -> list[str]:
     mode = "-ov" if job["options"]["mode"] == "ov" else "-nea"
+    if job["options"].get("align", "wcs") == "wcs":
+        # Same EXOTIC main(); only its image-registration fallback is swapped
+        # for the WCS offset (see exotic_driver.py).
+        return [sys.executable, str(_DRIVER), "-red", "inits.json", mode]
     return [sys.executable, "-m", "exotic.exotic", "-red", "inits.json", mode]
 
 
@@ -374,6 +382,7 @@ def _run(job: dict) -> None:
 # ------------------------------------------------------------------ worker
 
 _queue: "queue.Queue[str]" = queue.Queue()
+_pending: dict[str, fieldlab.SessionAnalysis] = {}
 _worker: threading.Thread | None = None
 _lock = threading.Lock()
 
@@ -384,6 +393,12 @@ def _worker_loop() -> None:
         try:
             job = load(jid)
             if job["status"] == "queued":
+                an = _pending.pop(jid, None)
+                if an is None:
+                    raise RuntimeError("job lost its analysis before it started; submit again")
+                job["status"] = "preparing"
+                _write(job)
+                _prepare(an, job)
                 _run(job)
         except Exception as exc:                       # never let the worker die
             try:
@@ -412,7 +427,7 @@ def recover() -> None:
     """Jobs left queued/running by a previous process are re-queued; their
     frames folder is rebuilt because it was removed or never finished."""
     for job in list_jobs():
-        if job["status"] in ("queued", "running"):
+        if job["status"] in LIVE:
             job.update(status="failed", error="server restarted during the run; submit again",
                        finished_utc=_now())
             _write(job)
@@ -429,7 +444,7 @@ def submit(an: fieldlab.SessionAnalysis, *, mode: str = "nea", frames: str = "ke
         existing = load(jid)
     except JobNotFound:
         existing = None
-    if existing and not force and existing["status"] in ("queued", "running", "done"):
+    if existing and not force and existing["status"] in LIVE + ("done",):
         return existing, False
     if existing and existing["status"] == "running":
         return existing, False                        # never kill a live run
@@ -437,8 +452,10 @@ def submit(an: fieldlab.SessionAnalysis, *, mode: str = "nea", frames: str = "ke
            "options": options, "status": "queued", "created_utc": _now(),
            "exotic_version": exotic_version(), "command": " ".join(_command({"options": options})),
            "files": {}}
-    _prepare(an, job)
     _write(job)
+    # The frame copies are written by the worker, not in the request: for a
+    # 70-frame night that is tens of megabytes on the volume.
+    _pending[jid] = an
     _ensure_worker()
     _queue.put(jid)
     return job, True

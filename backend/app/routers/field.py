@@ -310,7 +310,7 @@ FramesQ = Query("kept", pattern="^(kept|all)$",
 def _job_response(job: dict, created: bool) -> Response:
     body = exotic_run.public(job)
     return Response(content=json.dumps(body, indent=2), media_type="application/json",
-                    status_code=202 if created or job["status"] in ("queued", "running") else 200,
+                    status_code=202 if created or job["status"] in exotic_run.LIVE else 200,
                     headers={"Cache-Control": "no-store"})
 
 
@@ -390,7 +390,7 @@ def _artifact(job_id: str, key: str) -> Response:
         blob, media, name = exotic_run.artifact(job_id, key)
     except exotic_run.NotReady:
         pub = exotic_run.public(job)
-        raise HTTPException(409 if job["status"] in ("queued", "running") else 404,
+        raise HTTPException(409 if job["status"] in exotic_run.LIVE else 404,
                             {"message": f"{key} is not available: job is {job['status']}",
                              "job": pub})
     inline = media.startswith("image/") or media in ("text/plain", "application/json")
