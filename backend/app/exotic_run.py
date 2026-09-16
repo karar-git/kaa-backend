@@ -38,6 +38,8 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
+
 from . import exotic, fieldlab
 from .config import settings
 
@@ -154,6 +156,76 @@ def _link_or_copy(src: Path, dst: Path) -> None:
         shutil.copyfile(src, dst)
 
 
+def _plate_scale(an: fieldlab.SessionAnalysis) -> float:
+    """arcsec/pixel from the first frame's header (IM_SCALE, PIXSCALE, or
+    pixel size and focal length); MicroObservatory binned 2x2 is 5.0."""
+    try:
+        _, hdr = fieldlab.read_fits(Path(an.frame_paths[0]))
+    except Exception:
+        return 5.0
+    for key in ("IM_SCALE", "PIXSCALE", "PLATESCL", "SECPIX"):
+        v = fieldlab._hdr_float(hdr, key)
+        if v and 0.1 < v < 60:
+            return v
+    px, fl = fieldlab._hdr_float(hdr, "XPIXSZ"), fieldlab._hdr_float(hdr, "FOCALLEN")
+    if px and fl:
+        return px * 1e-3 / fl * 206265.0
+    return 5.0
+
+
+def _target_xy(an: fieldlab.SessionAnalysis, i: int) -> tuple[float, float]:
+    x, y = an.positions[i, an.target_idx]
+    if not (np.isfinite(x) and np.isfinite(y)):
+        dx, dy = an.shifts[i]
+        x, y = an.stars[an.target_idx].x + dx, an.stars[an.target_idx].y + dy
+    return float(x), float(y)
+
+
+def _plain_name(name: str) -> str:
+    """`x.fits.fz` / `x.fits.gz` -> `x.fits`: the copy is written uncompressed
+    so the WCS sits in the primary header, where EXOTIC reads it."""
+    for z in (".fz", ".gz"):
+        if name.lower().endswith(z):
+            name = name[:-len(z)]
+    return name
+
+
+def _write_with_wcs(src: Path, dst: Path, target_xy: tuple[float, float],
+                    ra_deg: float, dec_deg: float, scale_arcsec: float) -> None:
+    """Copy one frame with a tangent-plane WCS centred on the target: the
+    target's sky position maps to its measured pixel in this frame. Only the
+    relative geometry matters to EXOTIC, which re-centres every star within
+    a 15-pixel box. North up, east left, no rotation (the field rotates by
+    under 0.1 degree over a night on this mount, under a pixel at the edge)."""
+    from astropy.io import fits
+    with fits.open(src, memmap=False) as hd:
+        hdu = next(h for h in hd if h.data is not None and getattr(h.data, "ndim", 0) == 2)
+        data = np.asarray(hdu.data)
+        header = hdu.header.copy()
+    for key in list(header):
+        if key.startswith(("CTYPE", "CRPIX", "CRVAL", "CDELT", "CROTA", "CD1_", "CD2_", "PC1_", "PC2_",
+                           "CUNIT", "LONPOLE", "LATPOLE", "ZBITPIX", "ZNAXIS", "ZCMPTYPE", "ZTILE",
+                           "ZNAME", "ZVAL", "ZIMAGE", "ZSIMPLE", "ZTENSION", "ZPCOUNT", "ZGCOUNT")):
+            del header[key]
+    deg = scale_arcsec / 3600.0
+    header["CTYPE1"] = "RA---TAN"
+    header["CTYPE2"] = "DEC--TAN"
+    header["CRVAL1"] = (float(ra_deg), "target RA (deg, ICRS)")
+    header["CRVAL2"] = (float(dec_deg), "target Dec (deg, ICRS)")
+    header["CRPIX1"] = (target_xy[0] + 1.0, "target x in this frame, 1-based")
+    header["CRPIX2"] = (target_xy[1] + 1.0, "target y in this frame, 1-based")
+    header["CD1_1"] = -deg
+    header["CD1_2"] = 0.0
+    header["CD2_1"] = 0.0
+    header["CD2_2"] = deg
+    header["CUNIT1"] = "deg"
+    header["CUNIT2"] = "deg"
+    header["RADESYS"] = "ICRS"
+    header["EQUINOX"] = 2000.0
+    header["WCSNOTE"] = "ExoTransit Lab: WCS from tracked target position, not a plate solution"
+    fits.PrimaryHDU(data=data, header=header).writeto(dst, overwrite=True, output_verify="silentfix")
+
+
 def _prepare(an: fieldlab.SessionAnalysis, job: dict) -> None:
     """Lay out the folder EXOTIC expects: frames/, darks/, save/, inits.json."""
     d = _job_path(job["job_id"])
@@ -163,11 +235,25 @@ def _prepare(an: fieldlab.SessionAnalysis, job: dict) -> None:
         sub.mkdir(parents=True)
     opts = job["options"]
     skip = set(an.lost_frames) if opts["frames"] == "kept" else set()
+    wcs_hint = opts.get("align", "wcs") == "wcs"
+    if wcs_hint:
+        tm = exotic.timing(an)
+        ra, dec = tm["ra_deg"], tm["dec_deg"]
+        scale = _plate_scale(an)
+        job["wcs_hint"] = {"ra_deg": ra, "dec_deg": dec, "arcsec_per_pixel": scale,
+                           "note": "each frame copy carries a TAN WCS whose reference pixel is the "
+                                   "target's measured position in that frame, so EXOTIC locates the "
+                                   "stars through world_to_pixel instead of image registration; "
+                                   "EXOTIC still re-centres, measures and fits everything itself"}
     kept = 0
     for i, p in enumerate(an.frame_paths):
         if i in skip:
             continue
-        _link_or_copy(Path(p), frames / Path(p).name)
+        if wcs_hint:
+            dst = frames / _plain_name(Path(p).name)
+            _write_with_wcs(Path(p), dst, _target_xy(an, i), ra, dec, scale)
+        else:
+            _link_or_copy(Path(p), frames / Path(p).name)
         kept += 1
     n_darks = 0
     if an.calibration_dir:
@@ -333,11 +419,11 @@ def recover() -> None:
 
 
 def submit(an: fieldlab.SessionAnalysis, *, mode: str = "nea", frames: str = "kept",
-           obscode: str = "", force: bool = False) -> tuple[dict, bool]:
+           align: str = "wcs", obscode: str = "", force: bool = False) -> tuple[dict, bool]:
     """Start (or find) the EXOTIC job for this analysis. Returns (job, created)."""
     if not available():
         raise RuntimeError("the exotic package is not installed on this server")
-    options = {"mode": mode, "frames": frames, "obscode": obscode or ""}
+    options = {"mode": mode, "frames": frames, "align": align, "obscode": obscode or ""}
     jid = job_id(an, options)
     try:
         existing = load(jid)

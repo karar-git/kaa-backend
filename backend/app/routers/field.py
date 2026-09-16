@@ -296,6 +296,11 @@ def exotic_bundle(session: str = SessionQ, calibration: str | None = CalQ,
 ModeQ = Query("nea", pattern="^(nea|ov)$",
               description="`nea`: EXOTIC takes the planet's parameters from the NASA Exoplanet "
                           "Archive (its default). `ov`: it uses the values in our inits.json.")
+AlignQ = Query("wcs", pattern="^(wcs|exotic)$",
+               description="`wcs`: each frame handed to EXOTIC carries a WCS built from the target "
+                           "position our tracking measured, so EXOTIC finds the stars through it. "
+                           "`exotic`: frames as they are; EXOTIC registers images itself (astroalign), "
+                           "which fails on most MicroObservatory frames and leaves the run unusable.")
 FramesQ = Query("kept", pattern="^(kept|all)$",
                 description="`kept`: only frames in which our analysis recovered the stars "
                             "(EXOTIC aligns everything to the first frame, so a twilight "
@@ -310,7 +315,7 @@ def _job_response(job: dict, created: bool) -> Response:
 
 
 def _submit(session: str, calibration: str | None, x: float | None, y: float | None,
-            mode: str, frames: str, obscode: str, force: bool) -> tuple[dict, bool]:
+            mode: str, frames: str, align: str, obscode: str, force: bool) -> tuple[dict, bool]:
     if not exotic_run.available():
         raise HTTPException(503, "EXOTIC is not installed on this server (pip install exotic).")
     an = _analysis(session, calibration, x, y)
@@ -318,7 +323,7 @@ def _submit(session: str, calibration: str | None, x: float | None, y: float | N
     if not an.frame_paths:
         raise HTTPException(422, "This session has no FITS files on disk for EXOTIC to read.")
     try:
-        return exotic_run.submit(an, mode=mode, frames=frames, obscode=obscode, force=force)
+        return exotic_run.submit(an, mode=mode, frames=frames, align=align, obscode=obscode, force=force)
     except RuntimeError as exc:
         raise HTTPException(503, str(exc))
 
@@ -327,7 +332,7 @@ def _submit(session: str, calibration: str | None, x: float | None, y: float | N
              status_code=202, responses={200: {"description": "A finished or running job already exists"},
                                          202: {"description": "Job queued"}})
 def exotic_run_start(session: str = SessionQ, calibration: str | None = CalQ,
-                     mode: str = ModeQ, frames: str = FramesQ, obscode: str = ObsCodeQ,
+                     mode: str = ModeQ, frames: str = FramesQ, align: str = AlignQ, obscode: str = ObsCodeQ,
                      force: bool = Query(False, description="Re-run even if a finished job exists"),
                      x: float | None = XQ, y: float | None = YQ) -> Response:
     """Hands the session's raw frames and darks to NASA's EXOTIC and lets it do
@@ -341,18 +346,18 @@ def exotic_run_start(session: str = SessionQ, calibration: str | None = CalQ,
     session with the same options is one job: asking again returns it.
     Typical run: 3-10 minutes for 60 frames. Requires internet on the server
     (NASA Exoplanet Archive and limb-darkening models)."""
-    job, created = _submit(session, calibration, x, y, mode, frames, obscode, force)
+    job, created = _submit(session, calibration, x, y, mode, frames, align, obscode, force)
     return _job_response(job, created)
 
 
 @router.get("/exotic/run", summary="Status of the EXOTIC job for a session (starts one if none)",
             responses={200: {"description": "Finished job"}, 202: {"description": "Queued or running"}})
 def exotic_run_status(session: str = SessionQ, calibration: str | None = CalQ,
-                      mode: str = ModeQ, frames: str = FramesQ, obscode: str = ObsCodeQ,
+                      mode: str = ModeQ, frames: str = FramesQ, align: str = AlignQ, obscode: str = ObsCodeQ,
                       x: float | None = XQ, y: float | None = YQ) -> Response:
     """Same as POST without `force`: convenient for a browser or a dashboard
     that just wants the answer for a session."""
-    job, created = _submit(session, calibration, x, y, mode, frames, obscode, False)
+    job, created = _submit(session, calibration, x, y, mode, frames, align, obscode, False)
     return _job_response(job, created)
 
 

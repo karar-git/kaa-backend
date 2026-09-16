@@ -145,7 +145,7 @@ Anything outside `OBS_ROOT`, `UPLOAD_DIR` and `SESSION_ROOTS` is refused.
 | `GET /api/field/exotic/prereduced.csv?session=…` | Our light curve as EXOTIC's `-pre` input: BJD_TDB, flux, uncertainty, airmass |
 | `GET /api/field/exotic/aavso.txt?session=…` | AAVSO Exoplanet Database report in the layout EXOTIC writes. `&obscode=` |
 | `GET /api/field/exotic/bundle.zip?session=…` | All three plus a README with the exact `exotic` commands |
-| `POST /api/field/exotic/run?session=…` | **Run EXOTIC itself** on the session's raw frames as a background job; returns a `job_id`. Same session + options = same job. `&mode=nea|ov`, `&frames=kept|all`, `&force=true` |
+| `POST /api/field/exotic/run?session=…` | **Run EXOTIC itself** on the session's raw frames as a background job; returns a `job_id`. Same session + options = same job. `&mode=nea|ov`, `&frames=kept|all`, `&align=wcs|exotic`, `&force=true` |
 | `GET /api/field/exotic/run?session=…` | Status of that job, starting one if none exists (202 while queued/running, 200 when done) |
 | `GET /api/field/exotic/jobs` · `/jobs/{job_id}` | All jobs; one job's status, `progress`, `log_tail`, EXOTIC's fitted `results` and file `urls` |
 | `GET /api/field/exotic/jobs/{job_id}/lightcurve.png` | EXOTIC's own final light-curve plot. Also `fov.png`, `triangle.png`, `params.json`, `lightcurve.csv`, `aavso.txt`, `log.txt`, `inits.json`, `results.zip` |
@@ -169,7 +169,15 @@ alignment, PSF and aperture photometry, limb darkening from PHOENIX models,
 nested-sampling transit fit, plot, AAVSO file). Our code only writes the
 `inits.json` it starts from (the star pixels we found, the archive planet
 parameters) and, by default, leaves out the frames in which no stars were
-recoverable, because EXOTIC aligns every image to the first one. A run takes
+recoverable, because EXOTIC aligns every image to the first one. EXOTIC's own
+image registration (astroalign) fails on nearly every MicroObservatory frame
+(too few bright stars; its last-resort `imreg_dft` path is dead on current
+numpy), which leaves its photometry pointed at empty sky. So by default
+(`align=wcs`) each frame copy handed to EXOTIC carries a tangent-plane WCS
+whose reference pixel is the target position our tracking measured; EXOTIC
+then locates every star through `world_to_pixel`, re-centres it and does all
+the measuring and fitting itself. `align=exotic` hands the frames over
+untouched. A run takes
 minutes, so it is a job: poll `urls.status`, then fetch `urls.lightcurve_png`
 and `urls.params_json`. Jobs are stored under `EXOTIC_DIR` and are never
 computed twice for the same frames and options. The server needs internet for
