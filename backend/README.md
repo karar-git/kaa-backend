@@ -249,6 +249,16 @@ railway domain          # prints the public URL
 `/api/health`, which reports the data inventory — so a deploy that built fine but
 shipped no data fails the check instead of silently 503-ing later.
 
+`railway up` uploads the code only (`.railwayignore` excludes `data/`). The
+Dockerfile downloads `backend/data` (results, tiles, classifier; ~150 MB) from
+the GitHub repository at build time, at the commit named by the `DATA_REV`
+build argument (default `main`), so **push before you deploy**. This keeps the
+upload to a few hundred kilobytes, which matters on a slow connection: the CLI
+times out on uploads that take more than about a minute and leaves a FAILED
+deployment with no build behind. Alternatively connect the GitHub repository
+to the service in the Railway dashboard (Settings > Source, root directory
+`backend`) and every push deploys by itself.
+
 ### Environment variables
 
 | Variable | Required | Purpose |

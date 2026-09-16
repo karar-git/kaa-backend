@@ -1,12 +1,11 @@
-# Railway CLI falls back to .gitignore when this file is absent, which would
-# exclude data/ -- and data/ is exactly what the image needs. Listing the
-# exclusions explicitly here keeps the results and tiles in the upload.
+# What `railway up` sends. data/ is deliberately excluded: the Dockerfile
+# fetches results/, static/ and model/ from the GitHub repository at build
+# time, so the upload is the code only and finishes on any connection. Raw
+# frames live on the service's volume (see README, "Shipping the raw frames").
 __pycache__/
 *.pyc
 .venv/
-.env
-data/static/_cache/
-smoke_test.py
-data/uploads/
-data/raw/
 .venv312/
+.env
+smoke_test.py
+data/

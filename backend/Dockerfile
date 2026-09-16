@@ -1,8 +1,10 @@
 # ExoTransit Lab API
 #
-# The image bakes in the precomputed results/ and static/ directories, so the
-# container has no runtime dependency on object storage or a mounted volume.
-# That is what makes the deploy a single `railway up` with nothing to configure.
+# The image carries the precomputed results/ and static/ directories, so the
+# container has no runtime dependency on object storage. Those 150 MB are not
+# uploaded with `railway up` (the CLI times out on a slow connection); the
+# build fetches them from the GitHub repository instead, at the commit given
+# by DATA_REV (default: main). Push data changes before deploying.
 
 FROM python:3.12-slim
 
@@ -13,9 +15,10 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# EXOTIC's dependencies (ultranest, rebound) compile C extensions on Linux.
+# build-essential: EXOTIC's dependencies (ultranest, rebound) compile C
+# extensions on Linux. curl + certificates: the data fetch below.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
+    && apt-get install -y --no-install-recommends build-essential curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependencies first: this layer is cached until requirements.txt changes, so
@@ -23,8 +26,15 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Precomputed results, tiles and the classifier, straight from the repository.
+ARG DATA_REPO=https://github.com/karar-git/kaa-backend
+ARG DATA_REV=main
+RUN curl -fsSL "${DATA_REPO}/archive/${DATA_REV}.tar.gz" \
+    | tar xz --strip-components=2 --wildcards '*/backend/data/*' \
+    && test -f data/results/planet_catalog.csv \
+    && du -sh data
+
 COPY app ./app
-COPY data ./data
 
 ENV DATA_DIR=/app/data
 
