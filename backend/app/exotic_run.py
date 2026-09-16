@@ -45,7 +45,7 @@ RUNS_DIR: Path = settings.EXOTIC_DIR
 STATUSES = ("queued", "running", "done", "failed")
 _LOG_TAIL = 20
 _PROGRESS = re.compile(r"Finding transformation (\d+) of (\d+)")
-_SPINNER = re.compile(r"(Thinking [|/\-] \.\.\. ?)+")
+_SPINNER = re.compile(r"(Thinking [|/\\-] \.\.\. ?)+")
 
 # What a finished run exposes, in the order EXOTIC writes them. `glob` is
 # relative to EXOTIC's save directory.
