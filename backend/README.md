@@ -174,10 +174,16 @@ image registration (astroalign) fails on nearly every MicroObservatory frame
 (too few bright stars; its last-resort `imreg_dft` path is dead on current
 numpy), which leaves its photometry pointed at empty sky. So by default
 (`align=wcs`) each frame copy handed to EXOTIC carries a tangent-plane WCS
-whose reference pixel is the target position our tracking measured; EXOTIC
-then locates every star through `world_to_pixel`, re-centres it and does all
-the measuring and fitting itself. `align=exotic` hands the frames over
-untouched. A run takes
+whose reference pixel is the target position our tracking measured, and
+EXOTIC is launched through `app/exotic_driver.py`, which runs EXOTIC's own
+`main()` with one function swapped: its image-registration fallback returns
+the offset between two frames' WCS reference pixels instead of the identity.
+EXOTIC re-centres every star, picks the comparison star, aperture and
+annulus, computes limb darkening, fits and plots. Validated on
+TRES-3 2026-08-10: 0 of 52 frames lost, 4.2% residual scatter, EXOTIC's
+mid-transit within 6 minutes of the archive prediction. `align=exotic`
+hands the frames over untouched (on this data that leaves EXOTIC's apertures
+on empty sky; kept for comparison). A run takes
 minutes, so it is a job: poll `urls.status`, then fetch `urls.lightcurve_png`
 and `urls.params_json`. Jobs are stored under `EXOTIC_DIR` and are never
 computed twice for the same frames and options. The server needs internet for
