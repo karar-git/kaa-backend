@@ -176,6 +176,9 @@ def warm() -> None:
     if missing:
         log.warning("missing results files: %s", ", ".join(missing))
     log.info("AI narration: %s", "enabled" if settings.ai_enabled else "disabled")
+    from . import exotic_run
+    exotic_run.recover()
+    log.info("EXOTIC: %s", exotic_run.exotic_version() or "not installed")
     for fn in (data.sessions, data.session_quality, data.audit):
         try:
             fn()

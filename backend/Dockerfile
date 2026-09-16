@@ -8,9 +8,15 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    MPLBACKEND=Agg
 
 WORKDIR /app
+
+# EXOTIC's dependencies (ultranest, rebound) compile C extensions on Linux.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Dependencies first: this layer is cached until requirements.txt changes, so
 # editing application code does not trigger a reinstall.

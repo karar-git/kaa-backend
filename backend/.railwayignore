@@ -9,3 +9,4 @@ data/static/_cache/
 smoke_test.py
 data/uploads/
 data/raw/
+.venv312/

@@ -198,6 +198,19 @@ if raw and raw["n"]:
         FAIL += not ok
         print(f"  {'ok  ' if ok else 'FAIL'} {r.status_code} GET  {url[:62]:62s} {len(r.content)} bytes")
     check("GET", f"/api/field/frame.png?session={fs}&frame=99999", expect=404)
+    from app import exotic_run as _xr
+    jobs = check("GET", "/api/field/exotic/jobs")
+    if jobs is not None:
+        print(f"       exotic installed: {jobs['exotic_installed']} ({jobs['exotic_version']}), "
+              f"{jobs['n']} jobs on disk")
+    # Starting a run is only checked for its refusal when EXOTIC is absent; a
+    # real run takes minutes and belongs to the deploy check, not this sweep.
+    if not _xr.available():
+        check("POST", f"/api/field/exotic/run?session={fs}", expect=503)
+    check("POST", f"/api/field/exotic/run?session={fs}&mode=bogus", expect=422)
+    check("GET", "/api/field/exotic/jobs/000000000000", expect=404)
+    check("GET", "/api/field/exotic/jobs/000000000000/lightcurve.png", expect=404)
+    check("GET", "/api/field/exotic/jobs/not-an-id", expect=404)
     check("GET", f"/api/field/lightcurve.png?session={fs}&mode=bogus", expect=422)
     check("GET", f"/api/field/summary?session={fs}&x=10", expect=422)
 else:

@@ -145,6 +145,10 @@ Anything outside `OBS_ROOT`, `UPLOAD_DIR` and `SESSION_ROOTS` is refused.
 | `GET /api/field/exotic/prereduced.csv?session=…` | Our light curve as EXOTIC's `-pre` input: BJD_TDB, flux, uncertainty, airmass |
 | `GET /api/field/exotic/aavso.txt?session=…` | AAVSO Exoplanet Database report in the layout EXOTIC writes. `&obscode=` |
 | `GET /api/field/exotic/bundle.zip?session=…` | All three plus a README with the exact `exotic` commands |
+| `POST /api/field/exotic/run?session=…` | **Run EXOTIC itself** on the session's raw frames as a background job; returns a `job_id`. Same session + options = same job. `&mode=nea|ov`, `&frames=kept|all`, `&force=true` |
+| `GET /api/field/exotic/run?session=…` | Status of that job, starting one if none exists (202 while queued/running, 200 when done) |
+| `GET /api/field/exotic/jobs` · `/jobs/{job_id}` | All jobs; one job's status, `progress`, `log_tail`, EXOTIC's fitted `results` and file `urls` |
+| `GET /api/field/exotic/jobs/{job_id}/lightcurve.png` | EXOTIC's own final light-curve plot. Also `fov.png`, `triangle.png`, `params.json`, `lightcurve.csv`, `aavso.txt`, `log.txt`, `inits.json`, `results.zip` |
 
 **EXOTIC compatibility.** [EXOTIC](https://github.com/rzellem/EXOTIC) is NASA
 JPL's Exoplanet Watch reduction code, and its own sample data is a night of
@@ -157,6 +161,19 @@ Pixel positions are zero-based (x = column, y = row) in the first frame with
 recovered stars; twilight frames to remove first are listed in the file. Times
 are BJD_TDB computed as in the pipeline; airmass is sec(z) from the header
 altitude. `/api/field/lightcurve` carries `bjd_tdb` and `airmass` per point too.
+
+**Running EXOTIC on the server.** `POST /api/field/exotic/run?session=…` does
+not convert anything of ours: it hands the raw frames and the night's darks to
+the real `exotic` package and lets it do the whole reduction (calibration,
+alignment, PSF and aperture photometry, limb darkening from PHOENIX models,
+nested-sampling transit fit, plot, AAVSO file). Our code only writes the
+`inits.json` it starts from (the star pixels we found, the archive planet
+parameters) and, by default, leaves out the frames in which no stars were
+recoverable, because EXOTIC aligns every image to the first one. A run takes
+minutes, so it is a job: poll `urls.status`, then fetch `urls.lightcurve_png`
+and `urls.params_json`. Jobs are stored under `EXOTIC_DIR` and are never
+computed twice for the same frames and options. The server needs internet for
+the NASA Exoplanet Archive lookup and the limb-darkening models.
 
 Optional on every GET: `calibration=<folder of darks>` (default: darks uploaded
 with the session, else the archive's darks from the same night, else the nearest
@@ -246,6 +263,8 @@ shipped no data fails the check instead of silently 503-ing later.
 | `UPLOAD_DIR` | no | Where `POST /api/field/upload` keeps frames. Default `DATA_DIR/uploads` |
 | `MAX_UPLOAD_MB` | no | Total size cap per upload, default 400 |
 | `FIELD_MAX_FRAMES` | no | Most frames one live session may hold, default 400 |
+| `EXOTIC_DIR` | no | Where EXOTIC jobs and their outputs live. Default `DATA_DIR/exotic`; on Railway set it on the volume |
+| `EXOTIC_TIMEOUT_S` | no | Kill an EXOTIC run after this many seconds, default 5400 |
 
 **The API key is read from the environment at call time and is never logged,
 never returned, and never accepted from a client.** If it is unset, `/api/explain`

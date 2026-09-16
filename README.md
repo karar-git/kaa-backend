@@ -70,6 +70,12 @@ the comparison stars and is therefore cloud, not the star.
 curve in EXOTIC's pre-reduced format (BJD_TDB, flux, error, airmass) and an
 AAVSO Exoplanet Database report, with a README giving the exact commands.
 
+**EXOTIC does the reduction too.** `POST .../exotic/run?session=…` runs the real
+EXOTIC on the session's raw frames on the server, as a background job, and
+`.../exotic/jobs/{job_id}/lightcurve.png` returns EXOTIC's own light curve and
+fit. Nothing in that result is computed by our code: it only writes the
+`inits.json` EXOTIC starts from. Our own quick-look stays available beside it.
+
 All 22 archive sessions are loaded on the live server. Example:
 
 ```

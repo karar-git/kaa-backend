@@ -1,7 +1,8 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pandas==2.2.3
-numpy==2.1.3
+# numpy is pinned by exotic (~=1.26); everything here runs on 1.26 or 2.x.
+numpy>=1.26,<3
 pydantic==2.10.4
 Pillow==11.1.0
 httpx==0.28.1
@@ -11,6 +12,11 @@ python-multipart==0.0.20
 astropy>=6.0
 scipy>=1.13
 matplotlib>=3.8
+
+# NASA's EXOTIC, run as a subprocess by /api/field/exotic/run. It pins numpy,
+# scipy, matplotlib and astropy to its own tested versions; pip resolves the
+# set above against them.
+exotic==4.3.1
 
 # Only needed once data/model/classifier.onnx is published by notebook 02.
 # Shipped unconditionally: without it, adding the model turns every

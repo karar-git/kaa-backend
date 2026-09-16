@@ -29,7 +29,7 @@ from fastapi.responses import Response
 
 import json
 
-from .. import exotic, fieldlab
+from .. import exotic, exotic_run, fieldlab
 from ..config import settings
 
 router = APIRouter(tags=["field"], prefix="/field")
@@ -289,6 +289,174 @@ def exotic_bundle(session: str = SessionQ, calibration: str | None = CalQ,
     _exotic_ready(an)
     return _attachment(exotic.bundle(an, obscode=obscode, fits_dir=fits_dir, darks_dir=darks_dir),
                        "application/zip", f"exotic_{_FNAME.sub('_', session)}.zip")
+
+
+# --------------------------------------------------------- EXOTIC itself
+
+ModeQ = Query("nea", pattern="^(nea|ov)$",
+              description="`nea`: EXOTIC takes the planet's parameters from the NASA Exoplanet "
+                          "Archive (its default). `ov`: it uses the values in our inits.json.")
+FramesQ = Query("kept", pattern="^(kept|all)$",
+                description="`kept`: only frames in which our analysis recovered the stars "
+                            "(EXOTIC aligns everything to the first frame, so a twilight "
+                            "frame first would sink the run). `all`: every frame as is.")
+
+
+def _job_response(job: dict, created: bool) -> Response:
+    body = exotic_run.public(job)
+    return Response(content=json.dumps(body, indent=2), media_type="application/json",
+                    status_code=202 if created or job["status"] in ("queued", "running") else 200,
+                    headers={"Cache-Control": "no-store"})
+
+
+def _submit(session: str, calibration: str | None, x: float | None, y: float | None,
+            mode: str, frames: str, obscode: str, force: bool) -> tuple[dict, bool]:
+    if not exotic_run.available():
+        raise HTTPException(503, "EXOTIC is not installed on this server (pip install exotic).")
+    an = _analysis(session, calibration, x, y)
+    _exotic_ready(an)
+    if not an.frame_paths:
+        raise HTTPException(422, "This session has no FITS files on disk for EXOTIC to read.")
+    try:
+        return exotic_run.submit(an, mode=mode, frames=frames, obscode=obscode, force=force)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+
+
+@router.post("/exotic/run", summary="Run EXOTIC itself on a session (background job)",
+             status_code=202, responses={200: {"description": "A finished or running job already exists"},
+                                         202: {"description": "Job queued"}})
+def exotic_run_start(session: str = SessionQ, calibration: str | None = CalQ,
+                     mode: str = ModeQ, frames: str = FramesQ, obscode: str = ObsCodeQ,
+                     force: bool = Query(False, description="Re-run even if a finished job exists"),
+                     x: float | None = XQ, y: float | None = YQ) -> Response:
+    """Hands the session's raw frames and darks to NASA's EXOTIC and lets it do
+    the whole reduction: calibration, alignment, photometry, limb darkening,
+    the transit fit and its plot. Our code only writes the `inits.json` (the
+    star positions it found, the planet's archive parameters) and picks the
+    frames.
+
+    Returns a job. Poll `urls.status` until `status` is `done`, then fetch
+    `urls.lightcurve_png`, `urls.params_json`, `urls.aavso_txt`. The same
+    session with the same options is one job: asking again returns it.
+    Typical run: 3-10 minutes for 60 frames. Requires internet on the server
+    (NASA Exoplanet Archive and limb-darkening models)."""
+    job, created = _submit(session, calibration, x, y, mode, frames, obscode, force)
+    return _job_response(job, created)
+
+
+@router.get("/exotic/run", summary="Status of the EXOTIC job for a session (starts one if none)",
+            responses={200: {"description": "Finished job"}, 202: {"description": "Queued or running"}})
+def exotic_run_status(session: str = SessionQ, calibration: str | None = CalQ,
+                      mode: str = ModeQ, frames: str = FramesQ, obscode: str = ObsCodeQ,
+                      x: float | None = XQ, y: float | None = YQ) -> Response:
+    """Same as POST without `force`: convenient for a browser or a dashboard
+    that just wants the answer for a session."""
+    job, created = _submit(session, calibration, x, y, mode, frames, obscode, False)
+    return _job_response(job, created)
+
+
+@router.get("/exotic/jobs", summary="Every EXOTIC job on this server")
+def exotic_jobs() -> dict:
+    jobs = [exotic_run.public(j) for j in exotic_run.list_jobs()]
+    return {"exotic_installed": exotic_run.available(), "exotic_version": exotic_run.exotic_version(),
+            "n": len(jobs), "jobs": jobs}
+
+
+def _job(job_id: str) -> dict:
+    try:
+        return exotic_run.load(job_id)
+    except exotic_run.JobNotFound:
+        raise HTTPException(404, f"No EXOTIC job {job_id!r}.")
+
+
+@router.get("/exotic/jobs/{job_id}", summary="EXOTIC job status, results and file links")
+def exotic_job(job_id: str) -> dict:
+    """`status` is queued, running, done or failed. While running, `progress`
+    and `log_tail` show where EXOTIC is. When done, `results` is EXOTIC's
+    FinalParams (mid-transit time, Rp/Rs, duration, their errors) and `urls`
+    lists every file it wrote."""
+    return exotic_run.public(_job(job_id))
+
+
+def _artifact(job_id: str, key: str) -> Response:
+    job = _job(job_id)
+    try:
+        blob, media, name = exotic_run.artifact(job_id, key)
+    except exotic_run.NotReady:
+        pub = exotic_run.public(job)
+        raise HTTPException(409 if job["status"] in ("queued", "running") else 404,
+                            {"message": f"{key} is not available: job is {job['status']}",
+                             "job": pub})
+    inline = media.startswith("image/") or media in ("text/plain", "application/json")
+    disp = "inline" if inline else "attachment"
+    return Response(content=blob, media_type=media,
+                    headers={"Content-Disposition": f'{disp}; filename="{name}"',
+                             "Cache-Control": "no-store" if job["status"] != "done" else "public, max-age=3600"})
+
+
+@router.get("/exotic/jobs/{job_id}/lightcurve.png", summary="EXOTIC's final light-curve plot",
+            response_class=Response, responses={200: {"content": {"image/png": {}}}})
+def exotic_job_lightcurve(job_id: str) -> Response:
+    return _artifact(job_id, "lightcurve_png")
+
+
+@router.get("/exotic/jobs/{job_id}/fov.png", summary="EXOTIC's field-of-view image with target and comps",
+            response_class=Response, responses={200: {"content": {"image/png": {}}}})
+def exotic_job_fov(job_id: str) -> Response:
+    return _artifact(job_id, "fov_png")
+
+
+@router.get("/exotic/jobs/{job_id}/triangle.png", summary="EXOTIC's posterior corner plot",
+            response_class=Response, responses={200: {"content": {"image/png": {}}}})
+def exotic_job_triangle(job_id: str) -> Response:
+    return _artifact(job_id, "triangle_png")
+
+
+@router.get("/exotic/jobs/{job_id}/params.json", summary="EXOTIC's FinalParams (fitted transit)",
+            response_class=Response, responses={200: {"content": {"application/json": {}}}})
+def exotic_job_params(job_id: str) -> Response:
+    return _artifact(job_id, "params_json")
+
+
+@router.get("/exotic/jobs/{job_id}/lightcurve.csv", summary="EXOTIC's final time series",
+            response_class=Response, responses={200: {"content": {"text/csv": {}}}})
+def exotic_job_csv(job_id: str) -> Response:
+    return _artifact(job_id, "lightcurve_csv")
+
+
+@router.get("/exotic/jobs/{job_id}/aavso.txt", summary="AAVSO report written by EXOTIC",
+            response_class=Response, responses={200: {"content": {"text/plain": {}}}})
+def exotic_job_aavso(job_id: str) -> Response:
+    return _artifact(job_id, "aavso_txt")
+
+
+@router.get("/exotic/jobs/{job_id}/log.txt", summary="EXOTIC's console output for the job",
+            response_class=Response, responses={200: {"content": {"text/plain": {}}}})
+def exotic_job_log(job_id: str) -> Response:
+    return _artifact(job_id, "log")
+
+
+@router.get("/exotic/jobs/{job_id}/inits.json", summary="The inits.json the job was run with",
+            response_class=Response, responses={200: {"content": {"application/json": {}}}})
+def exotic_job_inits(job_id: str) -> Response:
+    return _artifact(job_id, "inits")
+
+
+@router.get("/exotic/jobs/{job_id}/results.zip", summary="Everything EXOTIC wrote, zipped",
+            response_class=Response, responses={200: {"content": {"application/zip": {}}}})
+def exotic_job_zip(job_id: str) -> Response:
+    return _artifact(job_id, "results")
+
+
+@router.get("/exotic/jobs/{job_id}/{name}", summary="Any other EXOTIC output by key",
+            response_class=Response, include_in_schema=False)
+def exotic_job_any(job_id: str, name: str) -> Response:
+    stem, _, ext = name.rpartition(".")
+    key = f"{stem}_{ext}" if stem else name
+    if key not in exotic_run.ARTIFACTS:
+        raise HTTPException(404, f"Unknown file {name!r}; see the job's urls.")
+    return _artifact(job_id, key)
 
 
 # ------------------------------------------------------------------- upload

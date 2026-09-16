@@ -59,6 +59,10 @@ class Settings:
     # Enough for every session in the archive to stay warm after its first
     # request; one cached analysis is a few MB.
     FIELD_CACHE_SESSIONS = int(os.environ.get("FIELD_CACHE_SESSIONS", 32))
+    # EXOTIC runs (`/api/field/exotic/run`): one folder per job. On Railway
+    # point this at the volume so results outlive a redeploy.
+    EXOTIC_DIR = Path(os.environ.get("EXOTIC_DIR") or DATA_DIR / "exotic")
+    EXOTIC_TIMEOUT_S = int(os.environ.get("EXOTIC_TIMEOUT_S", 5400))
 
     # ---------------------------------------------------------------- server
     PORT = int(os.environ.get("PORT", 8000))               # Railway injects PORT

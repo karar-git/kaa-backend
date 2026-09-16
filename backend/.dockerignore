@@ -6,3 +6,4 @@ data/static/_cache/
 *.md
 data/uploads/
 data/raw/
+.venv312/
