@@ -27,7 +27,9 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 
-from .. import fieldlab
+import json
+
+from .. import exotic, fieldlab
 from ..config import settings
 
 router = APIRouter(tags=["field"], prefix="/field")
@@ -71,7 +73,11 @@ def _urls(session: str) -> dict:
             "stars": f"/api/field/stars{q}",
             "field_png": f"/api/field/frame.png{q}",
             "lightcurve_png": f"/api/field/lightcurve.png{q}",
-            "lightcurve_json": f"/api/field/lightcurve{q}"}
+            "lightcurve_json": f"/api/field/lightcurve{q}",
+            "exotic_inits": f"/api/field/exotic/inits.json{q}",
+            "exotic_prereduced": f"/api/field/exotic/prereduced.csv{q}",
+            "aavso_report": f"/api/field/exotic/aavso.txt{q}",
+            "exotic_bundle": f"/api/field/exotic/bundle.zip{q}"}
 
 
 @router.get("/sessions", summary="Sessions this server can analyse live")
@@ -170,15 +176,119 @@ def lightcurve(session: str = SessionQ, calibration: str | None = CalQ,
     draw it itself and overlay the pipeline's version where one exists."""
     an = _analysis(session, calibration, x, y)
     s = fieldlab.summary(an)
+    points = fieldlab.lightcurve_points(an)
+    timing_note = None
+    try:
+        tm = exotic.timing(an)
+        for p, b, a in zip(points, tm["bjd_tdb"], tm["airmass"]):
+            p["bjd_tdb"] = round(float(b), 7)
+            p["airmass"] = round(float(a), 4)
+        timing_note = (f"bjd_tdb: UTC->TDB plus barycentric light travel for RA {tm['ra_deg']:.5f}, "
+                       f"Dec {tm['dec_deg']:+.5f} ({tm['coord_source']}); airmass: {tm['airmass_source']}.")
+    except Exception as exc:                      # no coordinates, no astropy...
+        timing_note = f"bjd_tdb/airmass not available: {exc}"
     return {k: s[k] for k in ("session", "source", "target", "night", "n_frames",
                               "target_star", "comparison_stars", "rms_ppt",
                               "rms_target_only_ppt", "improvement_factor", "dip",
                               "dip_target_only", "reading", "warnings")} | {
         "normalisation": "norm_flux = target_flux / comp_flux_sum, divided by its "
                          "median; target_only_norm = target_flux / its median.",
-        "points": fieldlab.lightcurve_points(an),
+        "timing": timing_note,
+        "points": points,
         "urls": _urls(session),
     }
+
+
+# -------------------------------------------------------------- EXOTIC
+
+ObsCodeQ = Query("", description="Your AAVSO observer code, if you have one", max_length=16)
+_FNAME = re.compile(r"[^A-Za-z0-9_.-]+")
+
+
+def _attachment(body: bytes | str, media: str, filename: str) -> Response:
+    if isinstance(body, str):
+        body = body.encode("utf-8")
+    return Response(content=body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                             "Cache-Control": "public, max-age=300"})
+
+
+def _exotic_ready(an):
+    try:
+        exotic.timing(an)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+
+
+@router.get("/exotic/inits.json", summary="EXOTIC inits.json for a session",
+            response_class=Response, responses={200: {"content": {"application/json": {}}}})
+def exotic_inits(session: str = SessionQ, calibration: str | None = CalQ,
+                 obscode: str = ObsCodeQ,
+                 fits_dir: str | None = Query(None, description="Value for 'Directory with FITS files' "
+                                                                "on your machine"),
+                 darks_dir: str | None = Query(None, description="Value for 'Directory of Darks'"),
+                 save_dir: str | None = Query(None, description="Value for 'Directory to Save Plots'"),
+                 pixel_frame: int | None = Query(None, ge=0, description="Frame whose pixel coordinates "
+                                                                        "to quote. Default: first frame "
+                                                                        "with recovered stars"),
+                 x: float | None = XQ, y: float | None = YQ) -> Response:
+    """NASA's EXOTIC (Exoplanet Watch) initialisation file, filled in from this
+    session: observatory, camera, binning, filter, the target and comparison-star
+    pixel positions we found, and the planet's archive parameters.
+
+    Save it next to the frames, edit the three directories, and run
+    `exotic -red -i inits.json -nea`. Pixels are zero-based (x = column, y = row).
+    """
+    an = _analysis(session, calibration, x, y)
+    _exotic_ready(an)
+    d = exotic.inits(an, obscode=obscode, fits_dir=fits_dir, darks_dir=darks_dir,
+                     save_dir=save_dir, pixel_frame=pixel_frame)
+    return _attachment(json.dumps(d, indent=4), "application/json",
+                       f"inits_{_FNAME.sub('_', session)}.json")
+
+
+@router.get("/exotic/prereduced.csv", summary="Our light curve in EXOTIC's pre-reduced format",
+            response_class=Response, responses={200: {"content": {"text/csv": {}}}})
+def exotic_prereduced(session: str = SessionQ, calibration: str | None = CalQ,
+                      x: float | None = XQ, y: float | None = YQ) -> Response:
+    """Four comma-separated columns, BJD_TDB, flux, uncertainty, airmass, which is
+    what EXOTIC's `-pre` mode reads. Lets EXOTIC fit its transit model to the
+    photometry this API measured: `exotic -pre -i inits.json -nea`."""
+    an = _analysis(session, calibration, x, y)
+    _exotic_ready(an)
+    return _attachment(exotic.prereduced(an), "text/csv",
+                       f"prereduced_{_FNAME.sub('_', session)}.csv")
+
+
+@router.get("/exotic/aavso.txt", summary="AAVSO Exoplanet Database report",
+            response_class=Response, responses={200: {"content": {"text/plain": {}}}})
+def exotic_aavso(session: str = SessionQ, calibration: str | None = CalQ,
+                 obscode: str = ObsCodeQ,
+                 secondary: str = Query("", description="Secondary observer codes", max_length=64),
+                 notes: str = Query("", description="Prepended to #NOTES", max_length=500),
+                 x: float | None = XQ, y: float | None = YQ) -> Response:
+    """The `#TYPE=EXOPLANET` text format EXOTIC writes and the AAVSO accepts
+    (webobs file upload). Priors are the archive parameters; a RESULTS line is
+    included only when a dip was found, and is labelled as a dip search rather
+    than a model fit. Add your observer code before submitting."""
+    an = _analysis(session, calibration, x, y)
+    _exotic_ready(an)
+    return _attachment(exotic.aavso(an, obscode=obscode, secondary=secondary, notes=notes),
+                       "text/plain", f"aavso_{_FNAME.sub('_', session)}.txt")
+
+
+@router.get("/exotic/bundle.zip", summary="inits.json + pre-reduced curve + AAVSO report + README",
+            response_class=Response, responses={200: {"content": {"application/zip": {}}}})
+def exotic_bundle(session: str = SessionQ, calibration: str | None = CalQ,
+                  obscode: str = ObsCodeQ,
+                  fits_dir: str | None = Query(None), darks_dir: str | None = Query(None),
+                  x: float | None = XQ, y: float | None = YQ) -> Response:
+    """Everything needed to hand a session to EXOTIC, in one zip with a README
+    that gives the exact commands."""
+    an = _analysis(session, calibration, x, y)
+    _exotic_ready(an)
+    return _attachment(exotic.bundle(an, obscode=obscode, fits_dir=fits_dir, darks_dir=darks_dir),
+                       "application/zip", f"exotic_{_FNAME.sub('_', session)}.zip")
 
 
 # ------------------------------------------------------------------- upload

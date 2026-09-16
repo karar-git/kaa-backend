@@ -141,6 +141,22 @@ Anything outside `OBS_ROOT`, `UPLOAD_DIR` and `SESSION_ROOTS` is refused.
 | `GET /api/field/summary?session=…` | What was loaded: dark used, frames, timestamps, pixel range, stars, target rule, scatter, dip, and a one-line `reading` |
 | `GET /api/field/stars?session=…` | Detected stars with positions and roles |
 | `POST /api/field/upload` | Multipart `frames` (FITS files or one zip) and optional `darks`; returns an upload id |
+| `GET /api/field/exotic/inits.json?session=…` | **EXOTIC** initialisation file filled in from the analysis: observatory, binning, filter, target and comparison pixels, archive planet parameters. `&obscode=`, `&fits_dir=`, `&darks_dir=` |
+| `GET /api/field/exotic/prereduced.csv?session=…` | Our light curve as EXOTIC's `-pre` input: BJD_TDB, flux, uncertainty, airmass |
+| `GET /api/field/exotic/aavso.txt?session=…` | AAVSO Exoplanet Database report in the layout EXOTIC writes. `&obscode=` |
+| `GET /api/field/exotic/bundle.zip?session=…` | All three plus a README with the exact `exotic` commands |
+
+**EXOTIC compatibility.** [EXOTIC](https://github.com/rzellem/EXOTIC) is NASA
+JPL's Exoplanet Watch reduction code, and its own sample data is a night of
+MicroObservatory frames, so it reads this archive's FITS as-is (the raw files are
+kept unaltered for that reason). The routes above go further: they let EXOTIC
+either re-reduce a session from the frames using the stars we found
+(`exotic -red -i inits.json -nea`) or fit its transit model to our photometry
+(`exotic -pre -i inits.json -nea`), and they produce the AAVSO submission file.
+Pixel positions are zero-based (x = column, y = row) in the first frame with
+recovered stars; twilight frames to remove first are listed in the file. Times
+are BJD_TDB computed as in the pipeline; airmass is sec(z) from the header
+altitude. `/api/field/lightcurve` carries `bjd_tdb` and `airmass` per point too.
 
 Optional on every GET: `calibration=<folder of darks>` (default: darks uploaded
 with the session, else the archive's darks from the same night, else the nearest

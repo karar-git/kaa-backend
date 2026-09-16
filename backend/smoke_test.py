@@ -184,6 +184,19 @@ if raw and raw["n"]:
         PASS += ok
         FAIL += not ok
         print(f"  {'ok  ' if ok else 'FAIL'} {r.status_code} GET  {url[:62]:62s} {len(r.content)} bytes")
+    for url, ctype in ((f"/api/field/exotic/inits.json?session={fs}", "application/json"),
+                       (f"/api/field/exotic/prereduced.csv?session={fs}", "text/csv"),
+                       (f"/api/field/exotic/aavso.txt?session={fs}&obscode=TEST", "text/plain"),
+                       (f"/api/field/exotic/bundle.zip?session={fs}", "application/zip")):
+        r = client.get(url)
+        ok = r.status_code == 200 and r.headers["content-type"].startswith(ctype) and len(r.content) > 200
+        if ok and ctype == "application/json":
+            ok = "user_info" in r.json() and "planetary_parameters" in r.json()
+        if ok and ctype == "text/plain":
+            ok = r.text.startswith("#TYPE=EXOPLANET") and "#DATE,DIFF,ERR,DETREND_1" in r.text
+        PASS += ok
+        FAIL += not ok
+        print(f"  {'ok  ' if ok else 'FAIL'} {r.status_code} GET  {url[:62]:62s} {len(r.content)} bytes")
     check("GET", f"/api/field/frame.png?session={fs}&frame=99999", expect=404)
     check("GET", f"/api/field/lightcurve.png?session={fs}&mode=bogus", expect=422)
     check("GET", f"/api/field/summary?session={fs}&x=10", expect=422)

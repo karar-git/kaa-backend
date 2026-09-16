@@ -64,6 +64,12 @@ has processed yet. `.../summary` gives the numbers behind both pictures and a on
 reading, for example that a 30% drop in the target's raw flux vanishes once divided by
 the comparison stars and is therefore cloud, not the star.
 
+**EXOTIC compatible.** Every session can be handed to NASA's
+[EXOTIC](https://github.com/rzellem/EXOTIC) (Exoplanet Watch):
+`.../exotic/bundle.zip?session=…` returns a filled-in `inits.json`, our light
+curve in EXOTIC's pre-reduced format (BJD_TDB, flux, error, airmass) and an
+AAVSO Exoplanet Database report, with a README giving the exact commands.
+
 All 22 archive sessions are loaded on the live server. Example:
 
 ```

@@ -270,6 +270,17 @@ def read_fits(path: Path) -> tuple[np.ndarray, dict]:
     return data, hdr
 
 
+def _hdr_float(hdr: dict, key: str) -> float | None:
+    v = hdr.get(key)
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if np.isfinite(f) else None
+
+
 def _frame_mjd(hdr: dict, path: Path) -> float | None:
     mjd = _parse_ut(hdr.get("UT-OBS")) or _parse_ut(hdr.get("DATE-OBS"))
     if mjd is None and hdr.get("MJD-OBS") is not None:
@@ -334,6 +345,13 @@ class SessionAnalysis:
     lost_frames: list[int] = field(default_factory=list)
     dip_target_only: dict = field(default_factory=dict)
     reading: str = ""
+    # Header facts the EXOTIC / AAVSO export needs.
+    ra_deg: float | None = None          # telescope pointing from the header
+    dec_deg: float | None = None
+    telalt: np.ndarray | None = None     # per-frame altitude, deg (NaN if absent)
+    exptime_s: float | None = None
+    binning: str = "1x1"
+    filter_name: str = ""
     warnings: list[str] = field(default_factory=list)
     elapsed_s: float = 0.0
 
@@ -569,8 +587,11 @@ def _load_frames(ref: str) -> tuple[list[np.ndarray], list[dict], list[str], str
         try:
             fq = data.frame_quality()
             fq = fq[fq.session_id == ref].sort_values("frame_index")
-            for i, t in enumerate(fq.t_utc.tolist()[: len(frames)]):
+            for i, (t, alt) in enumerate(zip(fq.t_utc.tolist(), fq.TELALT.tolist())):
+                if i >= len(frames):
+                    break
                 hdrs[i]["UT-OBS"] = str(t).replace(" ", "T").replace("+00:00", "Z")
+                hdrs[i]["TELALT"] = alt
         except Exception:
             pass
         target, night = ref.split("__", 1)
@@ -645,6 +666,14 @@ def analyse(ref: str, calibration: str | None = None,
         mjd = np.arange(len(frames)) * (exptime * 3) / 86400.0
     seconds = (mjd - mjd[0]) * 86400.0
     cadence = float(np.median(np.diff(seconds))) if len(seconds) > 1 else 180.0
+
+    # Pointing, altitude, binning and filter from the headers, for the exports.
+    h0 = hdrs[0]
+    ra_hdr, dec_hdr = _hdr_float(h0, "RA"), _hdr_float(h0, "DEC")
+    telalt = np.array([_hdr_float(h, "TELALT") for h in hdrs], dtype=float)
+    xb, yb = _hdr_float(h0, "XBINNING") or 1, _hdr_float(h0, "YBINNING") or 1
+    binning = f"{int(xb)}x{int(yb)}"
+    filter_name = str(h0.get("FILTER") or "").strip()
 
     # Calibration.
     exptime = None
@@ -833,6 +862,8 @@ def analyse(ref: str, calibration: str | None = None,
         dip=dip, residual_ref=res_ref.astype(np.float32), display_sigma=float(sigma0),
         reference_frame=int(ref_i), lost_frames=[int(i) for i in np.flatnonzero(lost)],
         dip_target_only=dip_t, reading=reading,
+        ra_deg=ra_hdr, dec_deg=dec_hdr, telalt=telalt, exptime_s=exptime,
+        binning=binning, filter_name=filter_name,
         warnings=warnings, elapsed_s=time.perf_counter() - t0,
     )
 
