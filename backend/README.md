@@ -155,8 +155,8 @@ JPL's Exoplanet Watch reduction code, and its own sample data is a night of
 MicroObservatory frames, so it reads this archive's FITS as-is (the raw files are
 kept unaltered for that reason). The routes above go further: they let EXOTIC
 either re-reduce a session from the frames using the stars we found
-(`exotic -red -i inits.json -nea`) or fit its transit model to our photometry
-(`exotic -pre -i inits.json -nea`), and they produce the AAVSO submission file.
+(`exotic -red inits.json -nea`) or fit its transit model to our photometry
+(`exotic -pre inits.json -nea`), and they produce the AAVSO submission file.
 Pixel positions are zero-based (x = column, y = row) in the first frame with
 recovered stars; twilight frames to remove first are listed in the file. Times
 are BJD_TDB computed as in the pipeline; airmass is sec(z) from the header

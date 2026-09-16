@@ -2,7 +2,7 @@
 
 `exotic.py` in this package *exports* our own photometry in EXOTIC's file
 formats. This module is the other direction: it hands the raw frames to the
-real EXOTIC (`exotic -red -i inits.json -nea`) and returns EXOTIC's own light
+real EXOTIC (`exotic -red inits.json -nea`) and returns EXOTIC's own light
 curve, fitted parameters and AAVSO report. Nothing in the reduction is ours:
 EXOTIC does the dark subtraction, alignment, PSF/aperture photometry, limb
 darkening (LDTK), the nested-sampling transit fit and the plot. Our code only
@@ -45,6 +45,7 @@ RUNS_DIR: Path = settings.EXOTIC_DIR
 STATUSES = ("queued", "running", "done", "failed")
 _LOG_TAIL = 20
 _PROGRESS = re.compile(r"Finding transformation (\d+) of (\d+)")
+_SPINNER = re.compile(r"(Thinking [|/\-] \.\.\. ?)+")
 
 # What a finished run exposes, in the order EXOTIC writes them. `glob` is
 # relative to EXOTIC's save directory.
@@ -205,7 +206,7 @@ def _prepare(an: fieldlab.SessionAnalysis, job: dict) -> None:
 
 def _command(job: dict) -> list[str]:
     mode = "-ov" if job["options"]["mode"] == "ov" else "-nea"
-    return [sys.executable, "-m", "exotic.exotic", "-red", "-i", "inits.json", mode]
+    return [sys.executable, "-m", "exotic.exotic", "-red", "inits.json", mode]
 
 
 def _env() -> dict:
@@ -240,7 +241,10 @@ def _tail(path: Path, n: int = _LOG_TAIL) -> list[str]:
         lines = path.read_text(errors="replace").splitlines()
     except OSError:
         return []
-    return [ln.rstrip() for ln in lines[-n:]]
+    # EXOTIC prints a spinner ("Thinking | ...") while it downloads catalogues;
+    # it is noise in a status response.
+    clean = [_SPINNER.sub("", ln).rstrip() for ln in lines]
+    return [ln for ln in clean if ln][-n:]
 
 
 def _run(job: dict) -> None:

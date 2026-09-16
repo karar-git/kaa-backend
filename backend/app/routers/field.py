@@ -237,7 +237,7 @@ def exotic_inits(session: str = SessionQ, calibration: str | None = CalQ,
     pixel positions we found, and the planet's archive parameters.
 
     Save it next to the frames, edit the three directories, and run
-    `exotic -red -i inits.json -nea`. Pixels are zero-based (x = column, y = row).
+    `exotic -red inits.json -nea`. Pixels are zero-based (x = column, y = row).
     """
     an = _analysis(session, calibration, x, y)
     _exotic_ready(an)
@@ -253,7 +253,7 @@ def exotic_prereduced(session: str = SessionQ, calibration: str | None = CalQ,
                       x: float | None = XQ, y: float | None = YQ) -> Response:
     """Four comma-separated columns, BJD_TDB, flux, uncertainty, airmass, which is
     what EXOTIC's `-pre` mode reads. Lets EXOTIC fit its transit model to the
-    photometry this API measured: `exotic -pre -i inits.json -nea`."""
+    photometry this API measured: `exotic -pre inits.json -nea`."""
     an = _analysis(session, calibration, x, y)
     _exotic_ready(an)
     return _attachment(exotic.prereduced(an), "text/csv",
