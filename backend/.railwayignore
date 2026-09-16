@@ -1,0 +1,11 @@
+# Railway CLI falls back to .gitignore when this file is absent, which would
+# exclude data/ -- and data/ is exactly what the image needs. Listing the
+# exclusions explicitly here keeps the results and tiles in the upload.
+__pycache__/
+*.pyc
+.venv/
+.env
+data/static/_cache/
+smoke_test.py
+data/uploads/
+data/raw/

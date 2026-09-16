@@ -1,0 +1,15 @@
+{
+  "n_darks": 60,
+  "master_median_counts": 369.5,
+  "master_spatial_sigma_counts": 2.965,
+  "single_dark_spatial_sigma_counts": 2.965,
+  "random_noise_1_dark": 1.048,
+  "random_noise_full_stack": 0.287,
+  "hot_pixels": 691,
+  "hot_pixel_fraction_pct": 0.2126,
+  "fixed_pattern_stability_corr_30_nights": 0.9749,
+  "camtemp_K_range_darks": [
+    276.0,
+    285.0
+  ]
+}

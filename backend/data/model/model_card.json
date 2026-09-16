@@ -1,0 +1,7 @@
+{
+  "architecture": "small_cnn",
+  "input": "32x32 float32, per-stamp median subtracted and MAD normalised, clipped to [-10, 60]",
+  "output": "6 logits in the order given by `classes`",
+  "trained_on": "27595 cutouts from 13 nights",
+  "beats_baseline_macro_f1_by": 0.3112
+}

@@ -1,0 +1,27 @@
+# Raw FITS archive (1.1 GB). Download from MicroObservatory; see README.
+database/
+
+# Compressed copy of the archive and anything users upload to the API.
+backend/data/raw/
+backend/data/uploads/
+backend/data/static/_cache/
+
+# Pipeline build products and Kaggle bundles (hundreds of MB each).
+kaggle/build/
+kaggle/out/
+kaggle/out_kaggle/
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+node_modules/

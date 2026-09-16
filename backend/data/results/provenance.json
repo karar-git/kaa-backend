@@ -1,0 +1,8 @@
+{
+ "generated_utc": "2026-09-16T11:51:04.124709+00:00",
+ "barycentric_correction_applied": true,
+ "time_column": "bjd_tdb",
+ "time_scale": "BJD_TDB (UTC->TDB and barycentric light travel applied)",
+ "max_timing_error_s": 0.0,
+ "observatory": "Whipple Observatory, Amado AZ (31.68 N, 110.88 W, 1268 m)"
+}

@@ -1,0 +1,9 @@
+hostname,pl_name,pl_orbper,pl_tranmid,pl_trandur,pl_trandep,default_flag,filled_from_composite,source
+CoRoT-2,CoRoT-2 b,1.7429935,2454237.53556,2.26704,2.75,1,,NASA Exoplanet Archive (live)
+HAT-P-10,WASP-11 b,3.72247,2456933.615316,2.556,1.6,1,"pl_tranmid,pl_trandur","NASA Exoplanet Archive (live; gaps filled from pscomppars: pl_tranmid,pl_trandur)"
+Qatar-1,Qatar-1 b,1.4200242,2456234.103218,1.66104,2.14,1,,NASA Exoplanet Archive (live)
+TrES-1,TrES-1 b,3.03007,2453186.806341,2.508,1.8,1,"pl_tranmid,pl_trandur","NASA Exoplanet Archive (live; gaps filled from pscomppars: pl_tranmid,pl_trandur)"
+TrES-3,TrES-3 b,1.30618581,2454185.9104,1.4177746,2.739,1,pl_trandur,NASA Exoplanet Archive (live; gaps filled from pscomppars: pl_trandur)
+TrES-5,TrES-5 b,1.48224686,2456458.59219,1.595,2.192,1,"pl_trandur,pl_trandep","NASA Exoplanet Archive (live; gaps filled from pscomppars: pl_trandur,pl_trandep)"
+WASP-10,WASP-10 b,3.0927616,2454664.037295,2.2271,2.525,1,,NASA Exoplanet Archive (live)
+WASP-2,WASP-2 b,2.152175,2458339.00342,1.78824,1.646,1,,NASA Exoplanet Archive (live)

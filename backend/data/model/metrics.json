@@ -1,0 +1,260 @@
+{
+  "generated_utc": "2026-09-16T11:53:40.390640+00:00",
+  "classes": [
+    "star",
+    "faint_source",
+    "hot_pixel",
+    "cosmic_ray",
+    "satellite_trail",
+    "noise"
+  ],
+  "n_cutouts": 44143,
+  "split": {
+    "strategy": "by observing night, never within one",
+    "train_sessions": [
+      "CoRoT-2__2026-08-09",
+      "CoRoT-2__2026-08-16",
+      "CoRoT-2__2026-08-23",
+      "CoRoT-2__2026-08-30",
+      "HATP-10__2026-09-05",
+      "Qatar-1__2026-08-18",
+      "TRES-1__2026-08-06",
+      "TRES-3__2026-08-27",
+      "TRES-5__2026-08-17",
+      "TRES-5__2026-08-20",
+      "TRES-5__2026-09-04",
+      "WASP-10__2026-08-08",
+      "WASP-2__2026-08-11"
+    ],
+    "val_sessions": [
+      "Qatar-1__2026-08-21",
+      "Qatar-1__2026-08-28",
+      "TRES-3__2026-08-10"
+    ],
+    "test_sessions": [
+      "TRES-3__2026-08-14",
+      "TRES-3__2026-08-31",
+      "TRES-5__2026-08-26",
+      "TRES-5__2026-08-29",
+      "TRES-5__2026-09-01",
+      "WASP-2__2026-08-24"
+    ],
+    "n_train": 27595,
+    "n_val": 4037,
+    "n_test": 12511
+  },
+  "class_share_pct": {
+    "faint_source": 27.18,
+    "hot_pixel": 27.18,
+    "star": 27.18,
+    "cosmic_ray": 10.35,
+    "noise": 7.86,
+    "satellite_trail": 0.24
+  },
+  "majority_class_accuracy": 0.2718,
+  "baseline": {
+    "name": "classical sigma-clip + morphology",
+    "accuracy": 0.1663336264087603,
+    "macro_precision": 0.1368518986199934,
+    "macro_recall": 0.14345110490703342,
+    "macro_f1": 0.10012723512711752
+  },
+  "models": {
+    "small_cnn": {
+      "accuracy": 0.41547438254336183,
+      "macro_precision": 0.4264680309246774,
+      "macro_recall": 0.5627464113696271,
+      "macro_f1": 0.41135557118966254,
+      "per_class": {
+        "star": {
+          "precision": 0.4895723614914683,
+          "recall": 0.5848012078510317,
+          "f1": 0.5329664029354432,
+          "support": 3974
+        },
+        "faint_source": {
+          "precision": 0.3672627235213205,
+          "recall": 0.30502665651180505,
+          "f1": 0.3332639900145621,
+          "support": 2626
+        },
+        "hot_pixel": {
+          "precision": 0.3951612903225806,
+          "recall": 0.05273069679849341,
+          "f1": 0.09304533586517921,
+          "support": 3717
+        },
+        "cosmic_ray": {
+          "precision": 0.23563654770944065,
+          "recall": 0.7637407711238721,
+          "f1": 0.36015473887814314,
+          "support": 1219
+        },
+        "satellite_trail": {
+          "precision": 0.09944751381215469,
+          "recall": 0.6923076923076923,
+          "f1": 0.17391304347826086,
+          "support": 26
+        },
+        "noise": {
+          "precision": 0.9717277486910995,
+          "recall": 0.9778714436248683,
+          "f1": 0.9747899159663865,
+          "support": 949
+        }
+      },
+      "confusion_matrix": [
+        [
+          2324,
+          615,
+          185,
+          827,
+          23,
+          0
+        ],
+        [
+          763,
+          801,
+          98,
+          895,
+          63,
+          6
+        ],
+        [
+          1641,
+          582,
+          196,
+          1275,
+          22,
+          1
+        ],
+        [
+          17,
+          180,
+          16,
+          931,
+          55,
+          20
+        ],
+        [
+          0,
+          1,
+          0,
+          7,
+          18,
+          0
+        ],
+        [
+          2,
+          2,
+          1,
+          16,
+          0,
+          928
+        ]
+      ]
+    },
+    "wide_cnn": {
+      "accuracy": 0.39988809847334345,
+      "macro_precision": 0.405899004228633,
+      "macro_recall": 0.5198464611232145,
+      "macro_f1": 0.3878818847183467,
+      "per_class": {
+        "star": {
+          "precision": 0.4871282734132268,
+          "recall": 0.5523402113739305,
+          "f1": 0.5176886792452831,
+          "support": 3974
+        },
+        "faint_source": {
+          "precision": 0.39844218094667466,
+          "recall": 0.25323686214775326,
+          "f1": 0.309662398137369,
+          "support": 2626
+        },
+        "hot_pixel": {
+          "precision": 0.3872491145218418,
+          "recall": 0.08824320688727469,
+          "f1": 0.1437335670464505,
+          "support": 3717
+        },
+        "cosmic_ray": {
+          "precision": 0.2127058823529412,
+          "recall": 0.7415914684167351,
+          "f1": 0.33059060157249953,
+          "support": 1219
+        },
+        "satellite_trail": {
+          "precision": 0.06086956521739131,
+          "recall": 0.5384615384615384,
+          "f1": 0.109375,
+          "support": 26
+        },
+        "noise": {
+          "precision": 0.8889990089197225,
+          "recall": 0.9452054794520548,
+          "f1": 0.916241062308478,
+          "support": 949
+        }
+      },
+      "confusion_matrix": [
+        [
+          2195,
+          444,
+          298,
+          999,
+          32,
+          6
+        ],
+        [
+          727,
+          665,
+          194,
+          915,
+          101,
+          24
+        ],
+        [
+          1565,
+          410,
+          328,
+          1376,
+          26,
+          12
+        ],
+        [
+          14,
+          149,
+          25,
+          904,
+          57,
+          70
+        ],
+        [
+          0,
+          0,
+          1,
+          11,
+          14,
+          0
+        ],
+        [
+          5,
+          1,
+          1,
+          45,
+          0,
+          897
+        ]
+      ]
+    }
+  },
+  "best_model": "small_cnn",
+  "epochs": 12,
+  "caveats": [
+    "Labels are derived from physical rules, not human annotation. A systematic error in a rule becomes a systematic error in the labels.",
+    "Split is by night, so scores reflect generalisation to unseen nights.",
+    "Accuracy is not the headline: the majority class is 27.2% of the data.",
+    "satellite_trail has very few examples; its metrics are correspondingly uncertain."
+  ]
+}

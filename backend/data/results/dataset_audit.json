@@ -1,0 +1,33 @@
+{
+  "science_frames": 1681,
+  "dark_frames": 60,
+  "total_files": 1741,
+  "brief_claims": 1633,
+  "discrepancy": 108,
+  "targets": 8,
+  "sessions": 22,
+  "date_first": "2026-08-06 07:34:22.622000+00:00",
+  "date_last": "2026-09-05 12:21:23.244000+00:00",
+  "exptime_unique": [
+    60.0
+  ],
+  "filters_science": [
+    "Clear"
+  ],
+  "filters_dark": [
+    "Opaque"
+  ],
+  "image_shape": [
+    500,
+    650
+  ],
+  "arcsec_per_px": 5.0,
+  "camtemp_K_range": [
+    273.0,
+    283.0
+  ],
+  "airmass_range": [
+    1.0,
+    9.203
+  ]
+}

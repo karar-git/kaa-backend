@@ -1,0 +1,21 @@
+# Railway service configuration.
+#
+# Deploy from this directory:
+#   railway init          # once, links the project
+#   railway up            # builds the Dockerfile and deploys
+#
+# Set OPENROUTER_API_KEY under the service's Variables tab if you want
+# POST /api/explain enabled. Everything else runs without it.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# /api/health reports which result files are present, so it is a real check
+# rather than a liveness ping that passes on an empty deploy.
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+numReplicas = 1
