@@ -102,6 +102,10 @@ def install(exotic_module, frames_dir: Path) -> None:
 
 def main() -> None:
     import json
+    # Python puts this script's folder first on sys.path, and that folder holds
+    # the API's own exotic.py, which would shadow the EXOTIC package.
+    here = Path(__file__).resolve().parent
+    sys.path[:] = [p for p in sys.path if p and Path(p).resolve() != here]
     args = sys.argv[1:]
     inits = next((Path(a) for a in args if a.endswith(".json")), Path("inits.json"))
     frames_dir = Path(json.loads(inits.read_text())["user_info"]["Directory with FITS files"])
