@@ -227,6 +227,48 @@ def _write_with_wcs(src: Path, dst: Path, target_xy: tuple[float, float],
     fits.PrimaryHDU(data=data, header=header).writeto(dst, overwrite=True, output_verify="silentfix")
 
 
+_EDGE = 12   # px: a star closer than this to the edge of the first frame is not handed to EXOTIC
+
+
+def _check_stars(an: fieldlab.SessionAnalysis, ini: dict, job: dict) -> None:
+    """EXOTIC needs the target and at least one comparison star inside the
+    first frame it sees; it prompts (and, with no terminal, dies) when the
+    list is empty and indexes out of range when a star has drifted off the
+    image. Drop comps outside the frame; if none is left, give it the
+    brightest unsaturated stars the analysis found instead."""
+    ny, nx = an.shape
+
+    def inside(p) -> bool:
+        return _EDGE <= p[0] < nx - _EDGE and _EDGE <= p[1] < ny - _EDGE
+
+    target = json.loads(ini["user_info"]["Target Star X & Y Pixel"])
+    if not inside(target):
+        raise RuntimeError(f"the target sits at {target} in the first frame given to EXOTIC, "
+                           f"outside the {nx}x{ny} image; pick another frame or session")
+    comps = [c for c in json.loads(ini["user_info"]["Comparison Star(s) X & Y Pixel"]) if c and inside(c)]
+    if not comps:
+        frame = ini["exotransit_lab"]["pixel_reference_frame"]
+        dx, dy = an.shifts[frame]
+        ranked = sorted(((k, s) for k, s in enumerate(an.stars) if k != an.target_idx and not s.saturated),
+                        key=lambda ks: -ks[1].flux)
+        for k, s in ranked:
+            x, y = an.positions[frame, k]
+            if not (np.isfinite(x) and np.isfinite(y)):
+                x, y = s.x + dx, s.y + dy
+            p = [int(round(float(x))), int(round(float(y)))]
+            if inside(p) and p != target:
+                comps.append(p)
+            if len(comps) >= 3:
+                break
+        job["comparison_note"] = ("none of the analysis' comparison stars was usable in the first "
+                                  "frame, so EXOTIC was given the brightest other stars; it picks "
+                                  "the best one itself")
+    if not comps:
+        raise RuntimeError("EXOTIC needs at least one comparison star and this session has no "
+                           "other usable star in the frame")
+    ini["user_info"]["Comparison Star(s) X & Y Pixel"] = json.dumps(comps + [[] for _ in range(10 - len(comps))])
+
+
 def _prepare(an: fieldlab.SessionAnalysis, job: dict) -> None:
     """Lay out the folder EXOTIC expects: frames/, darks/, save/, inits.json."""
     d = _job_path(job["job_id"])
@@ -282,6 +324,7 @@ def _prepare(an: fieldlab.SessionAnalysis, job: dict) -> None:
                 pp[key] = 0.01 if "Ratio" in key else (100 if "Temperature" in key else 0.1)
         if filled:
             ini["exotransit_lab"]["override_defaults"] = filled
+    _check_stars(an, ini, job)
     (d / "inits.json").write_text(json.dumps(ini, indent=2))
     job.update(n_frames_given=kept, n_frames_total=an.n_frames, n_darks=n_darks,
                target_pixel=json.loads(ini["user_info"]["Target Star X & Y Pixel"]),
@@ -403,7 +446,7 @@ def _worker_loop() -> None:
         except Exception as exc:                       # never let the worker die
             try:
                 job = load(jid)
-                job.update(status="failed", error=repr(exc), finished_utc=_now())
+                job.update(status="failed", error=str(exc) or repr(exc), finished_utc=_now())
                 _write(job)
             except Exception:
                 pass
